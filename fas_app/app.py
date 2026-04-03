@@ -6,6 +6,7 @@ Run:   python app.py
 Open:  http://localhost:8765
 """
 import sys, io, datetime, json, threading, webbrowser, os
+import re
 from email import policy
 from email.parser import BytesParser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -98,6 +99,51 @@ def parse_multipart_form_data(content_type, body):
         fields.setdefault(name, []).append(value)
 
     return fields
+
+
+def normalize_prn(value):
+    """
+    Normalize PRN values from Excel/CSV/user input while preserving significant digits.
+    """
+    s = str(value).replace("\ufeff", "").strip().strip("\"'")
+    if not s:
+        return ""
+    if s.lower() in {"nan", "none", "nat"}:
+        return ""
+
+    # Convert values like "202300101.0" to "202300101" (only exact .0... suffix)
+    if re.fullmatch(r"[+-]?\d+\.0+", s):
+        s = s.split(".", 1)[0]
+
+    # Handle scientific notation if the numeric value is an integer.
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?[eE][+-]?\d+", s):
+        try:
+            f = float(s)
+            if f.is_integer():
+                s = str(int(f))
+        except Exception:
+            pass
+
+    return s
+
+
+def read_uploaded_table(file_bytes):
+    """
+    Try Excel first (xls/xlsx), then CSV. This is more reliable than signature checks.
+    """
+    excel_error = None
+    try:
+        return pd.read_excel(io.BytesIO(file_bytes), dtype=str)
+    except Exception as exc:
+        excel_error = exc
+
+    try:
+        return pd.read_csv(io.BytesIO(file_bytes), dtype=str, encoding="utf-8-sig")
+    except Exception as csv_error:
+        raise ValueError(
+            "Could not read uploaded file as Excel or CSV. "
+            f"Excel error: {excel_error}; CSV error: {csv_error}"
+        )
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  PDF FILL ENGINE
@@ -330,20 +376,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def find_student(self, prn):
         db = STATE["students"]
-        s  = db.get(prn)
-        if not s: s = db.get(prn.rstrip(".0"))
+        needle = normalize_prn(prn)
+        if not needle:
+            return None
+
+        s = db.get(needle)
+        if s:
+            return s
+
         if not s:
             try:
-                n = float(prn)
+                n = float(needle)
                 for k, v in db.items():
                     try:
-                        if float(k) == n: s = v; break
+                        if float(normalize_prn(k)) == n:
+                            s = v
+                            break
                     except Exception: pass
             except Exception: pass
         if not s:
-            lo = prn.lower()
+            lo = needle.lower()
             for k, v in db.items():
-                if k.lower() == lo: s = v; break
+                if normalize_prn(k).lower() == lo:
+                    s = v
+                    break
         return s
 
     # ── GET ───────────────────────────────────────────────────────────────────
@@ -379,12 +435,12 @@ class Handler(BaseHTTPRequestHandler):
                     "name":      str(st.get("student_name", "")),
                     "dept":      str(st.get("DepartmentName", "")),
                     "programme": str(st.get("Programme", "")),
-                    "prn":       raw,
+                    "prn":       normalize_prn(raw) or raw,
                     "data":      {k: str(v) for k, v in st.items()
                                   if str(v) not in ("nan", "None", "NaT", "")},
                 })
             else:
-                avail = ", ".join(list(STATE["students"].keys())[:6])
+                avail = ", ".join(list(STATE["students"].keys())[:10]) or "None"
                 self.jsend({"ok": False,
                     "error": f'PRN "{raw}" not found. '
                              f'Available PRNs in your Excel: {avail}'})
@@ -446,10 +502,8 @@ class Handler(BaseHTTPRequestHandler):
 
             if ftype == "excel":
                 try:
-                    is_csv = not fdata.startswith(b"PK")
-                    df = (pd.read_csv(io.BytesIO(fdata), dtype=str) if is_csv
-                          else pd.read_excel(io.BytesIO(fdata), dtype=str))
-                    df.columns = [c.strip() for c in df.columns]
+                    df = read_uploaded_table(fdata)
+                    df.columns = [str(c).replace("\ufeff", "").strip() for c in df.columns]
                     df = df.fillna("")
                     prn_col = (
                         next((c for c in df.columns if c.lower().strip() == "prn"), None)
@@ -457,13 +511,15 @@ class Handler(BaseHTTPRequestHandler):
                         or df.columns[0])
                     students = {}
                     for _, row in df.iterrows():
-                        key = str(row[prn_col]).strip().rstrip(".0")
-                        if key and key not in ("nan", ""):
-                            students[key] = row.to_dict()
+                        key = normalize_prn(row.get(prn_col, ""))
+                        if key:
+                            row_data = {str(k): str(v) for k, v in row.to_dict().items()}
+                            row_data["prn"] = key
+                            students[key] = row_data
                     STATE["students"] = students
                     self.jsend({"ok": True, "count": len(students),
                                 "cols": len(df.columns), "prn_col": prn_col,
-                                "sample": ", ".join(list(students.keys())[:5])})
+                                "sample": ", ".join(list(students.keys())[:8])})
                 except Exception as e:
                     self.jsend({"ok": False, "error": str(e)})
 
