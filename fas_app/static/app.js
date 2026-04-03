@@ -74,9 +74,29 @@ function postFile(file, type, callback) {
   fd.append('file', file);
   fd.append('type', type);
   fetch('/api/upload', { method: 'POST', body: fd })
-    .then(r => r.json())
-    .then(callback)
-    .catch(e => callback({ ok: false, error: String(e) }));
+    .then(async r => {
+      const text = await r.text();
+      let data = null;
+
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (_) {
+          const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 160);
+          throw new Error(`Upload failed (HTTP ${r.status}). ${snippet || 'Non-JSON response from server.'}`);
+        }
+      }
+
+      if (!r.ok) {
+        throw new Error((data && data.error) || `Upload failed (HTTP ${r.status}).`);
+      }
+      if (!data) {
+        throw new Error('Upload failed: empty server response.');
+      }
+
+      callback(data);
+    })
+    .catch(e => callback({ ok: false, error: e.message || String(e) }));
 }
 
 /* ── Excel upload ────────────────────────────────────────────── */

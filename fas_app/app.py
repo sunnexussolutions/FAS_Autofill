@@ -6,6 +6,8 @@ Run:   python app.py
 Open:  http://localhost:8765
 """
 import sys, io, datetime, json, threading, webbrowser, os
+from email import policy
+from email.parser import BytesParser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -56,6 +58,46 @@ def clear_coordinator():
 
 # ── in-memory state ────────────────────────────────────────────────────────────
 STATE = {"students": {}, "pdf_bytes": None}
+
+
+def parse_multipart_form_data(content_type, body):
+    """
+    Parse multipart/form-data without relying on cgi (removed in Python 3.13+).
+    Returns a dict where each field maps to a list of values.
+    File fields are returned as bytes; text fields as str.
+    """
+    if not content_type:
+        raise ValueError("Missing Content-Type header")
+    if "multipart/form-data" not in content_type.lower():
+        raise ValueError("Expected multipart/form-data request")
+
+    raw = (
+        f"Content-Type: {content_type}\r\n"
+        "MIME-Version: 1.0\r\n"
+        "\r\n"
+    ).encode("utf-8") + body
+
+    msg = BytesParser(policy=policy.default).parsebytes(raw)
+    if not msg.is_multipart():
+        raise ValueError("Malformed multipart body")
+
+    fields = {}
+    for part in msg.iter_parts():
+        name = part.get_param("name", header="Content-Disposition")
+        if not name:
+            continue
+
+        payload = part.get_payload(decode=True) or b""
+        filename = part.get_param("filename", header="Content-Disposition")
+        if filename:
+            value = payload
+        else:
+            charset = part.get_content_charset() or "utf-8"
+            value = payload.decode(charset, errors="replace")
+
+        fields.setdefault(name, []).append(value)
+
+    return fields
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  PDF FILL ENGINE
@@ -386,13 +428,21 @@ class Handler(BaseHTTPRequestHandler):
             self.jsend({"ok": True})
 
         elif self.path == "/api/upload":
-            import cgi
-            ct, pd_ = cgi.parse_header(self.headers.get("Content-Type", ""))
-            pd_["boundary"]       = bytes(pd_.get("boundary", ""), "utf-8")
-            pd_["CONTENT-LENGTH"] = int(self.headers.get("Content-Length", 0))
-            fields = cgi.parse_multipart(self.rfile, pd_)
-            ftype  = fields.get("type", [""])[0]
-            fdata  = bytes(fields.get("file", [b""])[0])
+            try:
+                content_type = self.headers.get("Content-Type", "")
+                content_len = int(self.headers.get("Content-Length", 0))
+                if content_len <= 0:
+                    self.jsend({"ok": False, "error": "Empty upload request"}, 400)
+                    return
+
+                raw_body = self.rfile.read(content_len)
+                fields = parse_multipart_form_data(content_type, raw_body)
+                ftype = str(fields.get("type", [""])[0]).strip().lower()
+                fblob = fields.get("file", [b""])[0]
+                fdata = fblob if isinstance(fblob, bytes) else str(fblob).encode("utf-8")
+            except Exception as e:
+                self.jsend({"ok": False, "error": f"Upload parsing failed: {e}"}, 400)
+                return
 
             if ftype == "excel":
                 try:
