@@ -434,11 +434,19 @@ class Handler(BaseHTTPRequestHandler):
 # ══════════════════════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ══════════════════════════════════════════════════════════════════════════════
+def truthy(value):
+    return str(value).lower() in ("1", "true", "yes", "on")
+
+
+IS_RENDER = truthy(os.environ.get("RENDER"))
 PORT = int(os.environ.get("PORT", "8765"))
-HOST = os.environ.get("HOST", "127.0.0.1")
-OPEN_BROWSER = os.environ.get("OPEN_BROWSER", "1").lower() in ("1", "true", "yes")
+HOST = os.environ.get("HOST", "0.0.0.0" if IS_RENDER else "127.0.0.1")
+OPEN_BROWSER = truthy(os.environ.get("OPEN_BROWSER", "0" if IS_RENDER else "1"))
 IS_LOCAL_DEV = HOST in ("127.0.0.1", "localhost")
-DISPLAY_URL = f"http://localhost:{PORT}" if IS_LOCAL_DEV else f"http://{HOST}:{PORT}"
+DISPLAY_URL = (
+    os.environ.get("RENDER_EXTERNAL_URL")
+    or (f"http://localhost:{PORT}" if IS_LOCAL_DEV else f"http://{HOST}:{PORT}")
+)
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), Handler)

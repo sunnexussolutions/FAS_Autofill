@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "fas_app/requirements.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r fas_app/requirements.txt
+
+      - name: Verify Python syntax
+        run: python -m py_compile fas_app/app.py
+
+      - name: Run app health check
+        env:
+          HOST: "127.0.0.1"
+          PORT: "8765"
+          OPEN_BROWSER: "0"
+        run: |
+          set -euo pipefail
+          python fas_app/app.py > /tmp/app.log 2>&1 &
+          APP_PID=$!
+          trap "kill $APP_PID || true" EXIT
+
+          for i in {1..25}; do
+            if curl -fsS "http://127.0.0.1:8765/healthz" > /dev/null; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Health check failed"
+          cat /tmp/app.log
+          exit 1
