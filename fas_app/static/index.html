@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAS Auto-Filler · Sandip University</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">🎓</div>
+    <div>
+      <div class="nav-title">FAS Form Auto-Filler</div>
+      <div class="nav-sub">Sandip University, Nashik</div>
+    </div>
+  </div>
+  <div class="coord-badge" id="coordBadge" onclick="switchTab('coordinator')">
+    <span class="coord-dot" id="coordDot"></span>
+    <span id="coordBadgeText">No Coordinator Saved</span>
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<div class="main">
+
+  <!-- Tab bar -->
+  <div class="tabbar">
+    <button class="tab active" id="tab-generate"     onclick="switchTab('generate')">⚡ Generate Forms</button>
+    <button class="tab"        id="tab-coordinator"  onclick="switchTab('coordinator')">👤 Coordinator Profile</button>
+  </div>
+
+  <!-- ════════ GENERATE TAB ════════ -->
+  <div class="pane" id="pane-generate">
+
+    <!-- Step tracker -->
+    <div class="steps">
+      <div class="step-item">
+        <div class="step-circle active" id="sc1">1</div>
+        <span class="step-label active" id="sl1">Upload Excel</span>
+      </div>
+      <div class="step-line" id="sn1"></div>
+      <div class="step-item">
+        <div class="step-circle" id="sc2">2</div>
+        <span class="step-label" id="sl2">Upload PDF</span>
+      </div>
+      <div class="step-line" id="sn2"></div>
+      <div class="step-item">
+        <div class="step-circle" id="sc3">3</div>
+        <span class="step-label" id="sl3">Enter PRN</span>
+      </div>
+      <div class="step-line" id="sn3"></div>
+      <div class="step-item">
+        <div class="step-circle" id="sc4">4</div>
+        <span class="step-label" id="sl4">Download</span>
+      </div>
+    </div>
+
+    <!-- Upload row -->
+    <div class="upload-row">
+
+      <!-- Excel -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon blue-icon">📊</div>
+          <div>
+            <div class="card-title">Student Excel Sheet</div>
+            <div class="card-desc">Must have a column named <strong>prn</strong></div>
+          </div>
+        </div>
+        <div class="dropzone" id="excelZone">
+          <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" />
+          <span class="dz-icon">📂</span>
+          <div class="dz-main">Click to browse or drag &amp; drop</div>
+          <div class="dz-hint">.xlsx · .xls · .csv</div>
+          <div class="dz-filename" id="excelFilename"></div>
+        </div>
+        <div class="alert" id="excelAlert"></div>
+      </div>
+
+      <!-- PDF -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green-icon">📋</div>
+          <div>
+            <div class="card-title">Blank FAS Form PDF</div>
+            <div class="card-desc">Official Sandip University FAS template (blank)</div>
+          </div>
+        </div>
+        <div class="dropzone" id="pdfZone">
+          <input type="file" id="pdfFile" accept=".pdf" />
+          <span class="dz-icon">📄</span>
+          <div class="dz-main">Click to browse or drag &amp; drop</div>
+          <div class="dz-hint">.pdf</div>
+          <div class="dz-filename" id="pdfFilename"></div>
+        </div>
+        <div class="alert" id="pdfAlert"></div>
+      </div>
+
+    </div><!-- /upload-row -->
+
+    <!-- PRN Card -->
+    <div class="card" id="prnCard" style="display:none">
+      <div class="card-header">
+        <div class="card-icon blue-icon">🔍</div>
+        <div>
+          <div class="card-title">Enter Student PRN Number</div>
+          <div class="card-desc" id="prnHint">Type the PRN to fetch student details from your Excel</div>
+        </div>
+      </div>
+      <div class="prn-row">
+        <div class="input-wrap">
+          <label class="field-label" for="prnInput">PRN Number</label>
+          <input type="text" class="field-input" id="prnInput"
+                 placeholder="e.g. 202300101" autocomplete="off" spellcheck="false" />
+        </div>
+        <button class="btn btn-primary" id="findBtn" onclick="findStudent()">
+          🔍 Find Student
+        </button>
+      </div>
+      <div class="alert" id="prnAlert"></div>
+    </div>
+
+    <!-- Preview Card -->
+    <div id="previewSection" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green-icon">✅</div>
+          <div>
+            <div class="card-title">Student Found — Details Ready</div>
+            <div class="card-desc">All fields below will be filled at exact coordinates in the FAS form</div>
+          </div>
+        </div>
+
+        <div class="student-banner">
+          <div class="student-avatar" id="studentAvatar">?</div>
+          <div class="student-info">
+            <div class="student-name" id="studentName">—</div>
+            <div class="student-meta" id="studentMeta">—</div>
+          </div>
+          <div class="student-prn-box">
+            <span class="prn-label">PRN</span>
+            <span class="prn-value" id="studentPrn">—</span>
+          </div>
+        </div>
+
+        <!-- Coordinator info note -->
+        <div class="coord-note" id="coordNote" style="display:none">
+          <span class="coord-note-icon">👤</span>
+          <span id="coordNoteText">Coordinator details will be added to the Mentor Information page</span>
+        </div>
+
+        <div class="fields-heading">📋 Fields to be filled in the form</div>
+        <div class="fields-grid" id="fieldsGrid"></div>
+
+        <div class="divider"></div>
+        <div class="action-row">
+          <button class="btn btn-success" id="generateBtn" onclick="generateForm()">
+            ⚡ Generate &amp; Download Filled FAS Form
+          </button>
+          <button class="btn btn-ghost" onclick="resetPRN()">↩ Try Another PRN</button>
+        </div>
+        <div class="alert" id="generateAlert"></div>
+      </div>
+    </div>
+
+    <!-- Download Section -->
+    <div id="downloadSection" style="display:none">
+      <div class="download-box">
+        <span class="dl-icon">✅</span>
+        <div class="dl-title">FAS Form Filled &amp; Ready!</div>
+        <div class="dl-subtitle" id="dlSubtitle">Your filled form is ready to download.</div>
+        <div class="dl-actions">
+          <a class="btn btn-download" id="downloadLink" href="#" download>⬇️ Download Filled PDF</a>
+          <button class="btn btn-ghost" onclick="fillAnother()">🔄 Fill Another Student</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pane-generate -->
+
+
+  <!-- ════════ COORDINATOR TAB ════════ -->
+  <div class="pane" id="pane-coordinator" style="display:none">
+
+    <!-- Saved banner (shown when coordinator is saved) -->
+    <div class="saved-banner" id="savedBanner" style="display:none">
+      <div class="saved-info">
+        <div class="saved-check">✅</div>
+        <div>
+          <div class="saved-name" id="savedName">—</div>
+          <div class="saved-meta" id="savedMeta">—</div>
+        </div>
+      </div>
+      <button class="btn btn-danger" onclick="clearCoordinator()">
+        🗑️ Unsave &amp; Change
+      </button>
+    </div>
+
+    <!-- Entry form -->
+    <div class="card" id="coordinatorForm">
+      <div class="card-header">
+        <div class="card-icon amber-icon">👤</div>
+        <div>
+          <div class="card-title">Coordinator / Mentor Profile</div>
+          <div class="card-desc">
+            Enter your details below and click <strong>Save</strong>.
+            From that point, every FAS form generated will automatically include
+            your details in the <strong>Mentor Information page</strong> (both tables).
+            To change, click "Unsave &amp; Change" above, then fill and save new details.
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Personal &amp; Contact Details</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="field-label">Mentor Name <span class="required">*</span></label>
+          <input type="text" class="field-input" id="cName" placeholder="e.g. Dr. Rajesh Kumar" />
+        </div>
+        <div class="form-field">
+          <label class="field-label">Contact Number</label>
+          <input type="text" class="field-input" id="cContact" placeholder="Mobile / Phone number" />
+        </div>
+        <div class="form-field">
+          <label class="field-label">Email ID</label>
+          <input type="email" class="field-input" id="cEmail" placeholder="name@sandipuniversity.edu.in" />
+        </div>
+        <div class="form-field">
+          <label class="field-label">School / Faculty</label>
+          <input type="text" class="field-input" id="cSchool" placeholder="e.g. School of Computer Sciences and Engineering" />
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:8px">Department &amp; Mentee Info</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="field-label">Department</label>
+          <input type="text" class="field-input" id="cDept" placeholder="e.g. Artificial Intelligence and Machine Learning" />
+        </div>
+        <div class="form-field">
+          <label class="field-label">Class of Mentee</label>
+          <input type="text" class="field-input" id="cClass" placeholder="e.g. FE / SE / TE / BE" />
+        </div>
+        <div class="form-field">
+          <label class="field-label">No. of Mentees Allocated</label>
+          <input type="text" class="field-input" id="cNoMentee" placeholder="e.g. 20" />
+        </div>
+      </div>
+
+      <!-- Preview of how it looks in form -->
+      <div class="preview-table" id="previewTable" style="display:none">
+        <div class="section-title" style="margin-top:4px">Preview — Mentor Information page</div>
+        <table class="mentor-preview">
+          <tr><td class="mp-label">Mentor Name</td><td class="mp-value" id="pv-name"></td></tr>
+          <tr><td class="mp-label">School</td><td class="mp-value" id="pv-school"></td></tr>
+          <tr><td class="mp-label">Department</td><td class="mp-value" id="pv-dept"></td></tr>
+          <tr><td class="mp-label">Contact Details</td><td class="mp-value" id="pv-contact"></td></tr>
+          <tr><td class="mp-label">Email ID</td><td class="mp-value" id="pv-email"></td></tr>
+          <tr><td class="mp-label">No of Mentee Allocated</td><td class="mp-value" id="pv-nmentee"></td></tr>
+          <tr><td class="mp-label">Class of a Mentee</td><td class="mp-value" id="pv-class"></td></tr>
+        </table>
+      </div>
+
+      <div class="divider"></div>
+      <div class="action-row">
+        <button class="btn btn-primary" onclick="saveCoordinator()">💾 Save Coordinator Details</button>
+        <button class="btn btn-ghost" onclick="clearCoordinatorForm()">✕ Clear Form</button>
+        <button class="btn btn-ghost" onclick="togglePreview()">👁 Preview</button>
+      </div>
+      <div class="alert" id="coordAlert"></div>
+    </div>
+
+  </div><!-- /pane-coordinator -->
+
+  <footer class="footer">
+    FAS Form Auto-Filler v2.0 · Sandip University, Nashik · All data processed locally
+  </footer>
+
+</div><!-- /main -->
+
+<script src="app.js"></script>
+</body>
+</html>
